@@ -1,57 +1,108 @@
-import string 
-import numpy as np 
+# check.py — Spam detection with Logistic Regression only
+
 import pandas as pd
+import numpy as np
 
-import nltk
-from nltk.corpus import stopwords
-from nltk.stem.porter import PorterStemmer
-
-from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.pipeline import Pipeline
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import (
+    accuracy_score, precision_score, recall_score, f1_score,
+    classification_report, confusion_matrix, roc_auc_score
+)
 
+# -------------------------
+# 1) Load data
+# -------------------------
+df = pd.read_csv("url_spam_classification.csv")
 
-nltk.download('stopwords')
+# If labels are strings like "spam"/"ham", map them to 1/0.
+if df["is_spam"].dtype == object:
+    df["is_spam"] = df["is_spam"].str.lower().map({"spam": 1, "ham": 0}).astype(int)
 
-df = pd.read_csv('emails.csv')
+# -------------------------
+# 2) Minimal, fast features (all numeric)
+# -------------------------
+df["len_url"] = df["url"].str.len()
+df["contains_subscribe"] = df["url"].str.contains("subscribe", case=False, regex=False).astype(int)
+df["contains_hash"] = df["url"].str.contains("#", regex=False).astype(int)
+df["num_digits"] = df["url"].apply(lambda s: sum(c.isdigit() for c in s))
+# Name says non_https ⇒ 1 if NOT https, else 0
+df["non_https"] = (~df["url"].str.startswith("https")).astype(int)
+df["num_words"] = df["url"].apply(lambda s: len(s.split("/")))
 
-df['text'] = df['text'].apply(lambda x: x.replace('\r\n', ' '))
+target = "is_spam"
+features = ["len_url", "contains_subscribe", "contains_hash", "num_digits", "non_https", "num_words"]
 
-stemmer = PorterStemmer
-corpus = []
+X = df[features].astype(float)
+y = df[target].astype(int)
 
-stopwords_set = set(stopwords.words('english'))
+# -------------------------
+# 3) Train/test split
+# -------------------------
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=0, stratify=y
+)
 
-for i in range(len(df)):
-    text = df['text'].iloc[i].lower()
-    text = text.translate(str.makertrans('','', string.punctuation)).split()
-    text = [stemmer.stem(word) for word in text if word not in stopwords_set]
-    text = ' '.join(text)
-    corpus.append(text)
+# -------------------------
+# 4) Logistic Regression pipeline
+# -------------------------
+pipe = Pipeline([
+    ("scale", MinMaxScaler()),
+    ("lr", LogisticRegression(max_iter=1000, solver="lbfgs"))
+])
+pipe.fit(X_train, y_train)
 
-vectorizer = CountVectorizer()
+# -------------------------
+# 5) Evaluation
+# -------------------------
+y_pred = pipe.predict(X_test)
+y_prob = pipe.predict_proba(X_test)[:, 1]
 
-x = vectorizer.fit_transform(corpus).toarray()
-y = df.label_num
+acc = accuracy_score(y_test, y_pred)
+prec = precision_score(y_test, y_pred, zero_division=0)
+rec = recall_score(y_test, y_pred, zero_division=0)
+f1 = f1_score(y_test, y_pred, zero_division=0)
+auc = roc_auc_score(y_test, y_prob)
 
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
-     
-clf = RandomForestClassifier(n_jobs=-1)
-clf.fit(X_train, y_train)
+print("=== Logistic Regression (Spam vs Non-Spam) ===")
+print(f"Accuracy : {acc:.4f}")
+print(f"Precision: {prec:.4f}")
+print(f"Recall   : {rec:.4f}")
+print(f"F1-score : {f1:.4f}")
+print(f"ROC AUC  : {auc:.4f}\n")
 
-clf.score(X_test, y_test)
+print("Confusion Matrix:")
+print(confusion_matrix(y_test, y_pred), "\n")
 
-email_to_classify = df.text.values[10]
-email_to_classify
+print("Classification Report:")
+print(classification_report(y_test, y_pred, digits=4))
 
-email_text = email_to_classify.lower().translate(str.maketran('', '',string.punctuation)).split()
-email_text = [stemmer.stem(word) for word in text if word not in stopwords_set]
-email_text = ' '.join(email_text)
+# -------------------------
+# 6) Example: predict on a few URLs (optional)
+# -------------------------
+sample_urls = [
+    "https://example.com/account/subscribe?offer=free",
+    "http://192.168.0.1/login#reset",
+    "https://university.edu/resources/notes/week-1.pdf",
+]
+def featurize(url: str) -> dict:
+    return {
+        "len_url": len(url),
+        "contains_subscribe": int("subscribe" in url.lower()),
+        "contains_hash": int("#" in url),
+        "num_digits": sum(c.isdigit() for c in url),
+        "non_https": int(not url.startswith("https")),
+        "num_words": len(url.split("/")),
+    }
 
-email_corpus = [email_text]
+X_new = pd.DataFrame([featurize(u) for u in sample_urls])[features].astype(float)
+preds = pipe.predict(X_new)
+probs = pipe.predict_proba(X_new)[:, 1]
 
-X_email = vectorizer.transform(email_corpus)
+print("\n=== Sample predictions ===")
+for u, p, pr in zip(sample_urls, preds, probs):
+    label = "SPAM" if p == 1 else "NOT SPAM"
+    print(f"{label:9s}  ({pr:.3f} prob)  {u}")
 
-clf.predict(X_email)
-
-df.label_num.iloc[10]
