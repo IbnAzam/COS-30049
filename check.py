@@ -20,7 +20,7 @@ df['text'] = df['text'].apply(lambda x: x.replace('\r\n', ' '))
 stemmer = PorterStemmer
 corpus = []
 
-stopwords_set = set(stopwords.words('enflish'))
+stopwords_set = set(stopwords.words('english'))
 
 for i in range(len(df)):
     text = df['text'].iloc[i].lower()
