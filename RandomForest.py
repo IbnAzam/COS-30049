@@ -47,7 +47,7 @@ X_train, X_test, y_train, y_test = train_test_split(
 # --- Model (RandomForest) ---
 clf = RandomForestClassifier(
     n_estimators=100,     
-    max_depth=25,         # cap depth for speed; set None to grow fully (slower)
+    max_depth=200,         # cap depth for speed; set None to grow fully (slower)
     max_features="sqrt",  # standard RF setting
     n_jobs=-1,
     random_state=42
