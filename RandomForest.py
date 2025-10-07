@@ -1,68 +1,99 @@
+
+
+import numpy as np
 import pandas as pd
+
+
+
+from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.model_selection import train_test_split
-from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import classification_report, accuracy_score, confusion_matrix
+from sklearn.metrics import accuracy_score, classification_report
 
 
-# Regression Technique
-
-
-
+# --- Visualise model performance ---
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.metrics import confusion_matrix, RocCurveDisplay
 # --- Load data ---
 df = pd.read_csv("final.csv")
-assert {"content", "label"}.issubset(df.columns), "final.csv must have columns: content, label"
-df = df.dropna(subset=["content", "label"]).copy()
-df["label"] = df["label"].astype(int)
 
-X = df["content"]
-y = df["label"]
+# Basic cleanup (avoid NaNs)
+df["content"] = df["content"].astype(str).str.replace("\r\n", " ", regex=False).str.strip()
 
-# --- Split (stratified) ---
+# Labels (handle "spam"/"ham" or 0/1)
+y_raw = df["label"]
+if y_raw.dtype == object:
+    y = y_raw.astype(str).str.lower().map({"spam": 1, "ham": 0}).astype(int).values
+else:
+    y = y_raw.astype(int).values
+
+# --- Vectorise (keep it small for RF speed) ---
+# Reduce feature space so RF doesn't blow up memory/time
+vectorizer = CountVectorizer(
+    stop_words="english",
+    max_features=5000,   
+    min_df=3             # drop super-rare words
+)
+X = vectorizer.fit_transform(df["content"])
+
+print("Matrix shape:", X.shape)  # (rows, vocab)
+
+# --- Split ---
 X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size=0.2, random_state=42, stratify=y
 )
 
-# --- TF-IDF ---
-vectorizer = TfidfVectorizer(
-    stop_words="english",
-    max_features=5000,
-    ngram_range=(1,2),
-    lowercase=True
-)
-X_train_tfidf = vectorizer.fit_transform(X_train)
-X_test_tfidf  = vectorizer.transform(X_test)
-
-# Some sklearn builds accept sparse CSR for forests; if you hit an error or it’s slow,
-# uncomment the next two lines to densify (watch RAM if dataset is large).
-# X_train_tfidf = X_train_tfidf.toarray()
-# X_test_tfidf  = X_test_tfidf.toarray()
-
-# --- Random Forest ---
-rf = RandomForestClassifier(
-    n_estimators=300,
-    max_depth=None,            # let trees grow; you can cap (e.g., 20) if overfitting
-    min_samples_leaf=1,
+# --- Model (RandomForest) ---
+clf = RandomForestClassifier(
+    n_estimators=100,     
+    max_depth=25,         # cap depth for speed; set None to grow fully (slower)
+    max_features="sqrt",  # standard RF setting
     n_jobs=-1,
-    class_weight="balanced",
     random_state=42
 )
-rf.fit(X_train_tfidf, y_train)
+clf.fit(X_train, y_train)
 
 # --- Evaluate ---
-y_pred = rf.predict(X_test_tfidf)
-print(f"Accuracy: {accuracy_score(y_test, y_pred):.4f}\n")
-print(classification_report(y_test, y_pred, digits=4))
-print("Confusion matrix (rows=true, cols=pred):")
-print(confusion_matrix(y_test, y_pred))
+y_pred = clf.predict(X_test)
+print("Test accuracy:", accuracy_score(y_test, y_pred))
+print("\nClassification report:\n", classification_report(y_test, y_pred, digits=4))
 
-# Optional: probabilities for threshold tuning (e.g., maximize spam recall)
-# y_proba = rf.predict_proba(X_test_tfidf)[:, 1]
+# --- Classify a sample email (e.g., row 10) ---
+idx = 10
+if 0 <= idx < len(df):
+    email_text = str(df["content"].iloc[idx])
+    X_email = vectorizer.transform([email_text])
+    pred = clf.predict(X_email)[0]
+    print(f"\nRow {idx} -> Predicted: {pred} | Actual: {df['label'].iloc[idx]}")
 
-# Optional: top "important" tokens (often noisy for text, but can be interesting)
-# import numpy as np
-# importances = rf.feature_importances_
-# indices = np.argsort(importances)[::-1][:20]
-# feats = vectorizer.get_feature_names_out()
-# top = [(feats[i], float(importances[i])) for i in indices]
-# print("Top features by importance:", top)
+
+
+
+
+
+
+
+# Confusion Matrix (Model Errors)
+cm = confusion_matrix(y_test, y_pred)
+plt.figure(figsize=(4,3))
+sns.heatmap(cm, annot=True, fmt="d", cmap="Blues",
+            xticklabels=["Ham (0)", "Spam (1)"],
+            yticklabels=["Ham (0)", "Spam (1)"])
+plt.title("Confusion Matrix – RandomForest")
+plt.xlabel("Predicted")
+plt.ylabel("Actual")
+plt.tight_layout()
+plt.savefig("confusion_matrix_rf.png", dpi=150)
+plt.close()
+
+# ROC Curve (True vs False Positives)
+y_prob = clf.predict_proba(X_test)[:, 1]
+RocCurveDisplay.from_predictions(y_test, y_prob)
+plt.title("ROC Curve – RandomForest")
+plt.savefig("roc_curve_rf.png", dpi=150)
+plt.close()
+
+print("\n Visualisations saved as:")
+print("confusion_matrix_rf.png")
+print("roc_curve_rf.png")
