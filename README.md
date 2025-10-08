@@ -22,3 +22,14 @@ Students may extract features such as:
 - Distribution of email lengths (spam vs. ham)  
 - Word clouds for spam and ham  
 - Histogram of keyword frequencies  
+
+## How to use
+- Run individual Machine Learning Model scripts on their own (generates png of visuals), there are three
+  1. LinearRegression.py
+  2. NaiveBayes.py
+  3. RandomForest.py
+
+- DataProcessing.py is merging the two separate CSVs and makiing common columns to align them into one coherent set
+  - Creates final.csv
+
+- DataAnalyst.py is data visualisation of the final.csv
