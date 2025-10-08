@@ -22,3 +22,9 @@ Students may extract features such as:
 - Distribution of email lengths (spam vs. ham)  
 - Word clouds for spam and ham  
 - Histogram of keyword frequencies  
+
+##NaiveBayes.py
+-Ensure final.csv is in the same folder as Naivebayes.py then run NaiveBayes.py
+-py naiveBayes.py 
+or
+-python naiveBayes.py
