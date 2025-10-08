@@ -4,6 +4,9 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.metrics import classification_report, accuracy_score, confusion_matrix
 
+import matplotlib.pyplot as plt
+from sklearn.metrics import confusion_matrix, RocCurveDisplay, roc_auc_score
+
 
 # Classification Technique
 
@@ -50,3 +53,40 @@ print(confusion_matrix(y_test, y_pred))
 
 # Optionally, predicted probabilities (useful if you want to tune a threshold)
 # y_proba = model_nb.predict_proba(X_test_tfidf)[:, 1]
+
+
+
+
+
+# --- Confusion Matrix (Naive Bayes) ---
+cm = confusion_matrix(y_test, y_pred)
+plt.figure(figsize=(4,3))
+plt.imshow(cm, interpolation="nearest", cmap="Blues")
+plt.title("Confusion Matrix – Naive Bayes")
+plt.xlabel("Predicted")
+plt.ylabel("Actual")
+plt.xticks([0,1], ["Ham (0)", "Spam (1)"])
+plt.yticks([0,1], ["Ham (0)", "Spam (1)"])
+
+# Annotate counts
+for (i, j), v in [((i,j), cm[i,j]) for i in range(cm.shape[0]) for j in range(cm.shape[1])]:
+    plt.text(j, i, str(v), ha="center", va="center", color="black")
+
+plt.tight_layout()
+plt.savefig("confusion_matrix_nb.png", dpi=150)
+plt.close()
+
+# --- ROC Curve (Naive Bayes) ---
+y_prob = model_nb.predict_proba(X_test_tfidf)[:, 1]   # spam=1 probability
+RocCurveDisplay.from_predictions(y_test, y_prob)
+plt.title("ROC Curve – Naive Bayes")
+plt.savefig("roc_curve_nb.png", dpi=150)
+plt.close()
+
+# AUC (Area Under ROC)
+auc = roc_auc_score(y_test, y_prob)
+print(f"\nAUC (NB): {auc:.4f}")
+
+print("\nVisualisations saved as:")
+print(" confusion_matrix_nb.png")
+print(" roc_curve_nb.png")

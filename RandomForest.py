@@ -10,6 +10,9 @@ from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, classification_report
 
+from sklearn.metrics import confusion_matrix, RocCurveDisplay
+
+
 
 # --- Visualise model performance ---
 import matplotlib.pyplot as plt
@@ -74,26 +77,31 @@ if 0 <= idx < len(df):
 
 
 
-# Confusion Matrix (Model Errors)
+# --- Confusion Matrix (Random Forest) ---
 cm = confusion_matrix(y_test, y_pred)
 plt.figure(figsize=(4,3))
-sns.heatmap(cm, annot=True, fmt="d", cmap="Blues",
-            xticklabels=["Ham (0)", "Spam (1)"],
-            yticklabels=["Ham (0)", "Spam (1)"])
-plt.title("Confusion Matrix – RandomForest")
+plt.imshow(cm, interpolation="nearest", cmap="Blues")
+plt.title("Confusion Matrix – Random Forest")
 plt.xlabel("Predicted")
 plt.ylabel("Actual")
+plt.xticks([0,1], ["Ham (0)", "Spam (1)"])
+plt.yticks([0,1], ["Ham (0)", "Spam (1)"])
+
+# Annotate cell counts
+for (i, j), v in [((i,j), cm[i,j]) for i in range(cm.shape[0]) for j in range(cm.shape[1])]:
+    plt.text(j, i, str(v), ha="center", va="center", color="black")
+
 plt.tight_layout()
 plt.savefig("confusion_matrix_rf.png", dpi=150)
 plt.close()
 
-# ROC Curve (True vs False Positives)
-y_prob = clf.predict_proba(X_test)[:, 1]
+# --- ROC Curve (Random Forest) ---
+y_prob = clf.predict_proba(X_test)[:, 1]   
 RocCurveDisplay.from_predictions(y_test, y_prob)
-plt.title("ROC Curve – RandomForest")
+plt.title("ROC Curve – Random Forest")
 plt.savefig("roc_curve_rf.png", dpi=150)
 plt.close()
 
-print("\n Visualisations saved as:")
-print("confusion_matrix_rf.png")
-print("roc_curve_rf.png")
+print("\nVisualisations saved as:")
+print(" confusion_matrix_rf.png")
+print(" roc_curve_rf.png")
