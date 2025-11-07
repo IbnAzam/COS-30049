@@ -1,66 +1,84 @@
 import { useState } from 'react';
 import { ScanPage, Result } from '../styles/Scan.styled';
+import { predictText } from '../api/predict';
 
 function Scan() {
-const [text, setText] = useState('');
+  const [text, setText] = useState('');
+  const [result, setResult] = useState(null);     // { label, probability, confidence_pct }
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
-const handleScan = async () => {
-    const res = await fetch('http://localhost:8000/predict', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text }),
-    });
-    const result = await res.json();
-    console.log(result);
-};
+  const handleScan = async () => {
+    if (!text.trim()) return;
+    setLoading(true); setError('');
+    try {
+      const data = await predictText(text);       // uses /api/predict via Vite proxy
+      setResult(data);
+      console.log(data);
+    } catch (e) {
+      setError(e?.response?.data?.detail || e?.message || 'Failed to reach API');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-const handleUpload = async (e) => {
+  const handleUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
     const content = await file.text();
     setText(content);
-};
+  };
 
-return (
+  return (
     <ScanPage>
-    <h1>Scan</h1>
+      <h1>Scan</h1>
 
-    {/* Left column */}
-    <form onSubmit={(e) => e.preventDefault()}>
+      {/* Left column */}
+      <form onSubmit={(e) => e.preventDefault()}>
         <textarea
-        placeholder="Paste or type text here..."
-        value={text}
-        onChange={(e) => setText(e.target.value)}
+          placeholder="Paste or type text here..."
+          value={text}
+          onChange={(e) => setText(e.target.value)}
         />
         <div className="actions">
-        <button type="button" onClick={handleScan}>Scan</button>
+          <button type="button" onClick={handleScan} disabled={loading || !text.trim()}>
+            {loading ? 'Scanning…' : 'Scan'}
+          </button>
 
-        {/* hidden file input, triggered by Upload */}
-        <input
+          {/* hidden file input, triggered by Upload */}
+          <input
             id="fileInput"
             type="file"
             accept=".txt"
             style={{ display: 'none' }}
             onChange={handleUpload}
-        />
-        <button
+          />
+          <button
             type="button"
             onClick={() => document.getElementById('fileInput').click()}
-        >
+            disabled={loading}
+          >
             Upload
-        </button>
+          </button>
         </div>
-    </form>
 
-    {/* Right column */}
-    <Result>
+        {error && <p style={{ color: 'crimson', marginTop: 8 }}>{error}</p>}
+      </form>
+
+      {/* Right column */}
+      <Result>
         <div className="card">
-        <div className="circle">0%</div>
-        <div className="label">Spam score</div>
+          <div className="circle">
+            {result ? Math.round(result.probability * 100) : 0}%
         </div>
-    </Result>
+
+          <div className="label">
+            {result ? result.label : 'Spam score'}
+          </div>
+        </div>
+      </Result>
     </ScanPage>
-);
+  );
 }
 
 export default Scan;

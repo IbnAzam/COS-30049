@@ -29,4 +29,5 @@ def predict(req: PredictRequest):
     if not text:
         raise HTTPException(status_code=400, detail="Text must not be empty.")
     result = classify_input(text)
+    result["confidence_pct"] = result["probability"] * 100
     return PredictResponse(**result)
