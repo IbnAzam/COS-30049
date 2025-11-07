@@ -49,6 +49,19 @@ jest-html-reporters-*.html
 .babel-cache/
 .stylelintcache
 
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pkl
+*.sqlite3
+
+# Virtual environment
+.venv/
+env/
+venv/
+
 # Misc
 *.log
 *.gz
