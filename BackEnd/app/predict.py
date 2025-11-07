@@ -13,12 +13,12 @@ url_model   = joblib.load(MODELS_DIR / "url_model.pkl")
 def classify_input(text: str) -> Dict[str, object]:
     """
     Returns:
-      {
+    {
         "label": "Spam" | "Ham",
         "probability": float (0..1),
         "model_used": "email" | "url",
         "pred": int (0 or 1)
-      }
+    }
     """
     # naive URL heuristic – tweak if you like
     use_url = text.strip().lower().startswith(("http://", "https://"))
