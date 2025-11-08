@@ -192,21 +192,27 @@ export default function StackedBar7d({ width = 720, height = 320 }) {
     const stacked = d3.stack().keys(keys)(points7);
 
     // Tooltip handlers (zoom-safe)
-    const showTip = (event, d, key) => {
-      const bucketKey = d.data.bucket;
-      const count = Math.round(d[1] - d[0]); // segment size
-      const html = `
-        <div style="font-weight:600;margin-bottom:2px">${fmtTick(bucketKey)}</div>
-        <div>
-          <span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${color(
-            key
-          )};margin-right:6px;vertical-align:middle;"></span>${key}: <b>${count}</b>
-        </div>
-        <div style="margin-top:2px;color:#666">Total: ${d.data.Total}</div>
-      `;
-      const [xv, yv] = pointerXY(event);
-      tooltip.html(html).style("left", `${xv + 12}px`).style("top", `${yv + 12}px`).style("opacity", 1);
-    };
+    // Tooltip handlers (zoom-safe)
+const showTip = (event, d, key) => {
+  const bucketKey = d.data.bucket;
+  const count = Math.round(d[1] - d[0]);       // segment size
+  const total = d.data.Total || 0;             // correct field (capital T)
+  const share = total ? ((count / total) * 100).toFixed(1) : "0.0";
+
+  const html = `
+    <div style="font-weight:600;margin-bottom:2px">${fmtTick(bucketKey)}</div>
+    <div>
+      <span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${color(
+        key
+      )};margin-right:6px;vertical-align:middle;"></span>${key}: <b>${count}</b>
+    </div>
+    <div style="color:#666">Share: ${share}%</div>
+    <div style="margin-top:2px;color:#666">Total: ${total}</div>
+  `;
+  const [xv, yv] = pointerXY(event);
+  tooltip.html(html).style("left", `${xv + 12}px`).style("top", `${yv + 12}px`).style("opacity", 1);
+};
+
 
     const moveTip = (event) => {
       const [xv, yv] = pointerXY(event);
@@ -255,6 +261,8 @@ export default function StackedBar7d({ width = 720, height = 320 }) {
     const xAxis = d3.axisBottom(x).tickFormat((bucket) => fmtTick(bucket));
     const yAxis = d3.axisLeft(y).ticks(5).tickFormat(d3.format("~s"));
 
+
+    // X-axis title
     g.append("g")
       .attr("transform", `translate(0,${innerH})`)
       .call(xAxis)
@@ -262,6 +270,16 @@ export default function StackedBar7d({ width = 720, height = 320 }) {
       .attr("font-size", 12);
 
     g.append("g").call(yAxis).selectAll("text").attr("font-size", 12);
+
+    // Y-axis title
+    g.append("text")
+      .attr("transform", "rotate(-90)")
+      .attr("x", -innerH / 2)
+      .attr("y", -margin.left + 14) // tuck near the axis
+      .attr("text-anchor", "middle")
+      .attr("font-size", 12)
+      .attr("fill", "#444")
+      .text("Count");
 
     // Legend (bottom-center)
     const legendHeight = 20;
