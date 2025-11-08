@@ -62,7 +62,6 @@ def classify_and_log(text: str, session: Session) -> Dict[str, object]:
     """Run classify_input and persist a row to SQLite."""
     t0 = time.perf_counter()
     result = classify_input(text)
-    dt_ms = (time.perf_counter() - t0) * 1000.0
 
     rec = Prediction(
         text=text,
@@ -71,12 +70,10 @@ def classify_and_log(text: str, session: Session) -> Dict[str, object]:
         probability=result["probability"],
         model_used=result["model_used"],
         pred=result["pred"],
-        infer_ms=dt_ms,
     )
     session.add(rec)
     session.commit()
     session.refresh(rec)
 
     result["id"] = rec.id
-    result["infer_ms"] = dt_ms
     return result
