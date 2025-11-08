@@ -1,30 +1,17 @@
-// src/pages/Stats.jsx
 import { StatsPage } from '../styles/Stats.styled';
-import ConfidenceDonut from '../dataVis/ConfidenceDonut';
+import StackedBar7d from '../dataVis/StackedBar7d';
 
-function Stats() {
-  // mock values for demonstration; later, these could come from your backend or local state
-  const spamRate = 0.82;
-  const hamRate = 1 - spamRate;
-
+export default function Stats() {
   return (
     <StatsPage>
       <h1>Stats</h1>
-      <p style={{ color: '#666' }}>Visual breakdown of classification confidence</p>
 
-      <div style={{
-        display: 'flex',
-        gap: '40px',
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginTop: '30px',
-        flexWrap: 'wrap'
-      }}>
-        <ConfidenceDonut label="Spam" probability={spamRate} />
-        <ConfidenceDonut label="Ham" probability={hamRate} />
+      <div className="fullwidth">
+        <h3>Spam vs Ham (Last 7 Days)</h3>
+        <StackedBar7d width={1200} height={250} />
       </div>
+
+      
     </StatsPage>
   );
 }
-
-export default Stats;

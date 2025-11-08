@@ -4,6 +4,8 @@ from typing import Literal, Dict, Any, List
 from fastapi import APIRouter, Depends, Query
 from sqlmodel import Session, select, col
 from sqlalchemy import func, text
+from zoneinfo import ZoneInfo
+from collections import defaultdict
 from .db import get_session, engine
 from .models import Prediction
 
@@ -77,24 +79,68 @@ def latest_spam(session: Session = Depends(get_session)):
 def timeseries(
     bucket: Literal["hour", "day", "week", "month"] = "day",
     days: int = Query(30, ge=1, le=365),
+    tz: str = Query("UTC"),                         # <— NEW
     session: Session = Depends(get_session),
 ) -> Dict[str, Any]:
     """
-    Returns points like:
-      { bucket: "2025-11-08T00:00:00Z", Spam: 10, Ham: 4, Total: 14 }
-    over the last N days (UTC window).
+    If tz != UTC and bucket == day:
+      - Aggregate by local (tz) calendar days (midnight→midnight), DST-safe.
+      - Return bucket as 'YYYY-MM-DD' local-day keys.
+
+    Otherwise, keep existing UTC grouping behavior.
     """
 
+    # --- Melbourne/local-day path (works for SQLite & Postgres) ---
+    if bucket == "day" and tz.upper() != "UTC":
+        tzinfo = ZoneInfo(tz)  # e.g. "Australia/Melbourne"
+
+        # Start at local midnight 'days-1' days ago, end at end of today (local)
+        now_local = datetime.now(tzinfo)
+        start_local = now_local.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=days - 1)
+        end_local = (start_local + timedelta(days=days)) - timedelta(microseconds=1)
+
+        # Convert window to UTC for DB filtering
+        start_utc = start_local.astimezone(timezone.utc)
+        end_utc = end_local.astimezone(timezone.utc)
+
+        # Pull raw rows within the UTC window; we’ll group in Python by local day
+        rows = session.exec(
+            select(Prediction.created_at, Prediction.label)
+            .where(Prediction.created_at >= start_utc)
+            .where(Prediction.created_at <= end_utc)
+        ).all()
+
+        counts = defaultdict(lambda: {"Ham": 0, "Spam": 0})
+        for created_at, label in rows:
+            # Ensure timezone-aware
+            if created_at.tzinfo is None:
+                created_at = created_at.replace(tzinfo=timezone.utc)
+            # Convert to local tz, then bucket by YYYY-MM-DD (local)
+            day_key = created_at.astimezone(tzinfo).strftime("%Y-%m-%d")
+            if label in ("Ham", "Spam"):
+                counts[day_key][label] += 1
+
+        # Build consecutive local days, filling gaps with zeros
+        out = []
+        cur = start_local
+        for _ in range(days):
+            key = cur.strftime("%Y-%m-%d")  # local-day key
+            h = counts[key]["Ham"]
+            s = counts[key]["Spam"]
+            out.append({"bucket": key, "Ham": h, "Spam": s, "Total": h + s})
+            cur += timedelta(days=1)
+
+        return {"bucket": "day", "tz": tz, "points": out}
+
+    # --- Original UTC grouping paths below (your existing logic) ---
     start = _utcnow() - timedelta(days=days)
 
     if DIALECT == "sqlite":
-        # SQLite stores datetimes as TEXT by default via SQLModel; use strftime
         if bucket == "hour":
             expr = "strftime('%Y-%m-%dT%H:00:00Z', created_at)"
         elif bucket == "day":
             expr = "strftime('%Y-%m-%dT00:00:00Z', created_at)"
         elif bucket == "week":
-            # ISO week label; later expand to a representative timestamp
             expr = "strftime('%Y-W%W', created_at)"
         else:  # month
             expr = "strftime('%Y-%m-01T00:00:00Z', created_at)"
@@ -108,9 +154,7 @@ def timeseries(
         """)
         rows = session.exec(sql, params={"start": start.isoformat()}).all()
 
-        # Collate buckets
-        buckets = []
-        spam_map, ham_map = {}, {}
+        buckets, spam_map, ham_map = [], {}, {}
         for b, label, c in rows:
             if b not in buckets:
                 buckets.append(b)
@@ -124,11 +168,9 @@ def timeseries(
             s = spam_map.get(b, 0)
             h = ham_map.get(b, 0)
             out.append({"bucket": b, "Spam": s, "Ham": h, "Total": s + h})
-
-        return {"bucket": bucket, "points": out}
+        return {"bucket": bucket, "tz": "UTC", "points": out}
 
     else:
-        # Postgres etc.: use DATE_TRUNC
         if bucket == "hour":
             trunc = func.date_trunc("hour", col(Prediction.created_at))
         elif bucket == "day":
@@ -145,10 +187,8 @@ def timeseries(
             .order_by("bucket")
         ).all()
 
-        buckets = []
-        spam_map, ham_map = {}, {}
+        buckets, spam_map, ham_map = [], {}, {}
         for b, label, c in rows:
-            # Ensure ISO-ish string with Z for the frontend
             b_str = b.replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
             if b_str not in buckets:
                 buckets.append(b_str)
@@ -162,8 +202,7 @@ def timeseries(
             s = spam_map.get(b, 0)
             h = ham_map.get(b, 0)
             out.append({"bucket": b, "Spam": s, "Ham": h, "Total": s + h})
-
-        return {"bucket": bucket, "points": out}
+        return {"bucket": bucket, "tz": "UTC", "points": out}
 
 
 @router.get("/distribution")
