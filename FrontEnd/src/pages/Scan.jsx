@@ -2,11 +2,14 @@ import { useState } from 'react';
 import { ScanPage, Result } from '../styles/Scan.styled';
 import { predictText } from '../api/predict';
 
+
 function Scan() {
 const [text, setText] = useState('');
 const [result, setResult] = useState(null);     // { label, probability, confidence_pct }
 const [loading, setLoading] = useState(false);
 const [error, setError] = useState('');
+const [lastScannedText, setLastScannedText] = useState('');
+
 
 const handleScan = async () => {
     if (!text.trim()) return;
@@ -14,6 +17,7 @@ const handleScan = async () => {
     try {
     const data = await predictText(text);       // uses /api/predict via Vite proxy
     setResult(data);
+    setLastScannedText(text);  // ✅ store the last scanned text
     console.log(data);
     } catch (e) {
     setError(e?.response?.data?.detail || e?.message || 'Failed to reach API');
@@ -41,7 +45,16 @@ return (
         onChange={(e) => setText(e.target.value)}
         />
         <div className="actions">
-        <button type="button" onClick={handleScan} disabled={loading || !text.trim()}>
+            
+        <button
+            type="button"
+            onClick={handleScan}
+            disabled={
+                loading ||
+                !text.trim() ||
+                text.trim() === lastScannedText.trim() // ✅ prevent duplicate scan
+            }
+            >
             {loading ? 'Scanning…' : 'Scan'}
         </button>
 
@@ -74,7 +87,7 @@ return (
             </div>
 
             <div className="label">
-                {result ? "Likely to be Spam": 'Spam Score'}
+                {result ? "Likely to be Spam": 'Enter Text To Begin'}
             </div>
 
             <div className="verdict">
