@@ -1,9 +1,11 @@
 # backend/app/main.py
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from sqlmodel import Session
 
 from .schemas import PredictRequest, PredictResponse
-from .predict import classify_input
+from .db import init_db, get_session
+from .predict import classify_and_log  # logging wrapper
 
 app = FastAPI(title="Spam Detector API", version="1.0.0")
 
@@ -19,15 +21,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.on_event("startup")
+def _startup():
+    init_db()  # create SQLite tables on boot
+
 @app.get("/")
 def health():
     return {"status": "ok"}
 
 @app.post("/predict", response_model=PredictResponse)
-def predict(req: PredictRequest):
+def predict(req: PredictRequest, session: Session = Depends(get_session)):
     text = req.text.strip()
     if not text:
         raise HTTPException(status_code=400, detail="Text must not be empty.")
-    result = classify_input(text)
+    result = classify_and_log(text, session)  # logs + returns inference
     result["confidence_pct"] = result["probability"] * 100
     return PredictResponse(**result)
