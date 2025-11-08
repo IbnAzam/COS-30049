@@ -1,7 +1,10 @@
+// StackedBar7d.jsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as d3 from "d3";
 
 const API = import.meta.env.VITE_API_BASE || "http://localhost:8000";
+
+// ---- Time formatting helpers ----
 
 // Melbourne label helper (display only)
 const fmtMelDate = (iso) =>
@@ -12,9 +15,9 @@ const fmtMelDate = (iso) =>
     weekday: "short",
   });
 
-
 // Detect if a bucket key is a local day key like "2025-11-09"
-const isLocalDayKey = (key) => typeof key === "string" && key.length === 10 && !key.includes("T");
+const isLocalDayKey = (key) =>
+  typeof key === "string" && key.length === 10 && !key.includes("T");
 
 // Melbourne "YYYY-MM-DD" from a Date
 const melDayKey = (d) =>
@@ -50,21 +53,52 @@ const labelFromUtcIso = (iso) =>
     weekday: "short",
   });
 
-const fmtTick = (bucket) => (isLocalDayKey(bucket) ? labelFromLocalKey(bucket) : labelFromUtcIso(bucket));
+const fmtTick = (bucket) =>
+  isLocalDayKey(bucket) ? labelFromLocalKey(bucket) : labelFromUtcIso(bucket);
 
+// ---- Tooltip utils (zoom-safe) ----
 
+/** Viewport-safe pointer coordinates for mouse/touch */
+const pointerXY = (evt) => {
+  if (evt?.clientX != null) return [evt.clientX, evt.clientY]; // mouse
+  const t = evt?.touches?.[0] || evt?.changedTouches?.[0]; // touch
+  if (t) return [t.clientX, t.clientY];
+  return [evt?.pageX ?? 0, evt?.pageY ?? 0]; // fallback
+};
 
+/** Create/reuse a single BODY-level tooltip (true fixed positioning) */
+function getBodyTooltip() {
+  let tip = d3.select("#global-stackedbar-tooltip");
+  if (tip.empty()) {
+    tip = d3.select("body").append("div").attr("id", "global-stackedbar-tooltip");
+  }
+  return tip
+    .style("position", "fixed")
+    .style("pointer-events", "none")
+    .style("background", "rgba(255,255,255,0.95)")
+    .style("box-shadow", "0 1px 2px rgba(0,0,0,0.06), 0 4px 12px rgba(0,0,0,0.08)")
+    .style("border", "1px solid #e5e7eb")
+    .style("border-radius", "8px")
+    .style("padding", "8px 10px")
+    .style("font-size", "12px")
+    .style("line-height", "1.2")
+    .style("z-index", 9999)
+    .style("opacity", 0);
+}
+
+// -----------------------------------
 
 export default function StackedBar7d({ width = 720, height = 320 }) {
   const [data, setData] = useState(null);
   const [err, setErr] = useState("");
   const ref = useRef(null);
-  const tooltipRef = useRef(null);
 
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch(`${API}/api/stats/timeseries?bucket=day&days=7&tz=Australia/Melbourne`);
+        const res = await fetch(
+          `${API}/api/stats/timeseries?bucket=day&days=7&tz=Australia/Melbourne`
+        );
         const json = await res.json();
         setData(json?.points ?? []);
       } catch (e) {
@@ -73,50 +107,53 @@ export default function StackedBar7d({ width = 720, height = 320 }) {
     })();
   }, []);
 
-  // Ensure 7 consecutive UTC-midnight buckets, fill gaps with zeros
   // Ensure 7 consecutive buckets that match what the server sends.
-// If server sends local day keys ("YYYY-MM-DD"): build last 7 Melbourne days and map counts.
-// If server sends UTC ISO (fallback): keep your original UTC path.
-const points7 = useMemo(() => {
-  if (!data) return null;
+  // If server sends local day keys ("YYYY-MM-DD"): build last 7 Melbourne days and map counts.
+  // If server sends UTC ISO (fallback): keep the original UTC path.
+  const points7 = useMemo(() => {
+    if (!data) return null;
 
-  if (data.length === 0) {
-    // keep axes stable with 7 zero bars (local-day version)
-    return buildLast7MelKeys().map((k) => ({ bucket: k, Spam: 0, Ham: 0, Total: 0 }));
-  }
+    if (data.length === 0) {
+      // keep axes stable with 7 zero bars (local-day version)
+      return buildLast7MelKeys().map((k) => ({
+        bucket: k,
+        Spam: 0,
+        Ham: 0,
+        Total: 0,
+      }));
+    }
 
-  const serverKeySample = data[0].bucket;
-  const serverUsesLocal = isLocalDayKey(serverKeySample);
+    const serverKeySample = data[0].bucket;
+    const serverUsesLocal = isLocalDayKey(serverKeySample);
 
-  if (serverUsesLocal) {
-    // Server has already aggregated by Melbourne day ("YYYY-MM-DD")
+    if (serverUsesLocal) {
+      // Server has already aggregated by Melbourne day ("YYYY-MM-DD")
+      const map = new Map(data.map((d) => [d.bucket, d]));
+      return buildLast7MelKeys().map((k) => {
+        const hit = map.get(k);
+        const Spam = hit?.Spam ?? 0;
+        const Ham = hit?.Ham ?? 0;
+        return { bucket: k, Spam, Ham, Total: Spam + Ham };
+      });
+    }
+
+    // Fallback: server is still sending UTC ISO midnights
     const map = new Map(data.map((d) => [d.bucket, d]));
-    return buildLast7MelKeys().map((k) => {
-      const hit = map.get(k);
+    const out = [];
+    const todayUTC = new Date();
+    todayUTC.setUTCHours(0, 0, 0, 0);
+
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(todayUTC);
+      d.setUTCDate(todayUTC.getUTCDate() - i);
+      const iso = d.toISOString().replace(".000Z", "Z");
+      const hit = map.get(iso);
       const Spam = hit?.Spam ?? 0;
       const Ham = hit?.Ham ?? 0;
-      return { bucket: k, Spam, Ham, Total: Spam + Ham };
-    });
-  }
-
-  // Fallback: server is still sending UTC ISO midnights
-  const map = new Map(data.map((d) => [d.bucket, d]));
-  const out = [];
-  const todayUTC = new Date();
-  todayUTC.setUTCHours(0, 0, 0, 0);
-
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date(todayUTC);
-    d.setUTCDate(todayUTC.getUTCDate() - i);
-    const iso = d.toISOString().replace(".000Z", "Z");
-    const hit = map.get(iso);
-    const Spam = hit?.Spam ?? 0;
-    const Ham = hit?.Ham ?? 0;
-    out.push({ bucket: iso, Spam, Ham, Total: Spam + Ham });
-  }
-  return out;
-}, [data]);
-
+      out.push({ bucket: iso, Spam, Ham, Total: Spam + Ham });
+    }
+    return out;
+  }, [data]);
 
   useEffect(() => {
     if (!points7) return;
@@ -124,15 +161,7 @@ const points7 = useMemo(() => {
     const svg = d3.select(ref.current);
     svg.selectAll("*").remove();
 
-    // Create / reuse absolutely-positioned tooltip div (outside SVG)
-    let tooltip = d3.select(tooltipRef.current);
-    if (tooltip.empty()) {
-      // Shouldn't happen since we render the div in JSX, but keep it safe
-      tooltip = d3
-        .select("body")
-        .append("div")
-        .attr("class", "stackedbar-tooltip");
-    }
+    const tooltip = getBodyTooltip();
 
     const margin = { top: 16, right: 12, bottom: 40, left: 42 };
     const innerW = width - margin.left - margin.right;
@@ -158,35 +187,30 @@ const points7 = useMemo(() => {
       .range([innerH, 0]);
 
     const keys = ["Ham", "Spam"]; // order matters for stack & legend
-    const color = d3
-      .scaleOrdinal()
-      .domain(keys)
-      .range(["#5bc0de", "#d9534f"]); // Ham teal, Spam red
+    const color = d3.scaleOrdinal().domain(keys).range(["#5bc0de", "#d9534f"]); // Ham teal, Spam red
 
     const stacked = d3.stack().keys(keys)(points7);
 
-    // Tooltip handlers
+    // Tooltip handlers (zoom-safe)
     const showTip = (event, d, key) => {
-      const bucketISO = d.data.bucket;
+      const bucketKey = d.data.bucket;
       const count = Math.round(d[1] - d[0]); // segment size
       const html = `
-        <div style="font-weight:600;margin-bottom:2px">${fmtTick(bucketISO)}</div>
-        <div><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${color(
-          key
-        )};margin-right:6px;vertical-align:middle;"></span>${key}: <b>${count}</b></div>
+        <div style="font-weight:600;margin-bottom:2px">${fmtTick(bucketKey)}</div>
+        <div>
+          <span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${color(
+            key
+          )};margin-right:6px;vertical-align:middle;"></span>${key}: <b>${count}</b>
+        </div>
         <div style="margin-top:2px;color:#666">Total: ${d.data.Total}</div>
       `;
-      const [pageX, pageY] = [event.pageX, event.pageY];
-      tooltip
-        .html(html)
-        .style("left", `${pageX + 12}px`)
-        .style("top", `${pageY + 12}px`)
-        .style("opacity", 1);
+      const [xv, yv] = pointerXY(event);
+      tooltip.html(html).style("left", `${xv + 12}px`).style("top", `${yv + 12}px`).style("opacity", 1);
     };
 
     const moveTip = (event) => {
-      const [pageX, pageY] = [event.pageX, event.pageY];
-      tooltip.style("left", `${pageX + 12}px`).style("top", `${pageY + 12}px`);
+      const [xv, yv] = pointerXY(event);
+      tooltip.style("left", `${xv + 12}px`).style("top", `${yv + 12}px`);
     };
 
     const hideTip = () => {
@@ -237,75 +261,35 @@ const points7 = useMemo(() => {
       .selectAll("text")
       .attr("font-size", 12);
 
-    g.append("g")
-      .call(yAxis)
-      .selectAll("text")
-      .attr("font-size", 12);
+    g.append("g").call(yAxis).selectAll("text").attr("font-size", 12);
 
-    // Legend
-    // Place the legend at the bottom-center of the chart
+    // Legend (bottom-center)
     const legendHeight = 20;
     const legend = g
-    .append("g")
-    .attr(
+      .append("g")
+      .attr(
         "transform",
-        `translate(${innerW / 2 - (keys.length * 80) / 2}, ${innerH + margin.bottom - legendHeight})`
-    );
+        `translate(${innerW / 2 - (keys.length * 80) / 2}, ${
+          innerH + margin.bottom - legendHeight
+        })`
+      );
 
-    // Data for each key/color pair
     const items = keys.map((name) => ({ name, color: color(name) }));
-
-    // Create groups for each legend item
     const item = legend
-    .selectAll(".legend-item")
-    .data(items)
-    .enter()
-    .append("g")
-    .attr("class", "legend-item")
-    .attr("transform", (_, i) => `translate(${i * 80}, 0)`); // horizontal spacing
+      .selectAll(".legend-item")
+      .data(items)
+      .enter()
+      .append("g")
+      .attr("class", "legend-item")
+      .attr("transform", (_, i) => `translate(${i * 80}, 0)`);
 
-    // Colored boxes
-    item
-    .append("rect")
-    .attr("width", 12)
-    .attr("height", 12)
-    .attr("rx", 2)
-    .attr("fill", (d) => d.color);
+    item.append("rect").attr("width", 12).attr("height", 12).attr("rx", 2).attr("fill", (d) => d.color);
 
-    // Labels
-    item
-    .append("text")
-    .attr("x", 18)
-    .attr("y", 10)
-    .attr("font-size", 12)
-    .text((d) => d.name);
-
+    item.append("text").attr("x", 18).attr("y", 10).attr("font-size", 12).text((d) => d.name);
   }, [points7, width, height]);
 
   if (err) return <p style={{ color: "crimson" }}>{err}</p>;
   if (!points7) return <p>Loading chart…</p>;
 
-  return (
-    <>
-      {/* Tooltip div lives outside SVG for easy positioning */}
-      <div
-        ref={tooltipRef}
-        style={{
-          position: "fixed",
-          pointerEvents: "none",
-          background: "rgba(255,255,255,0.95)",
-          boxShadow:
-            "0 1px 2px rgba(0,0,0,0.06), 0 4px 12px rgba(0,0,0,0.08)",
-          border: "1px solid #e5e7eb",
-          borderRadius: 8,
-          padding: "8px 10px",
-          fontSize: 12,
-          lineHeight: 1.2,
-          opacity: 0,
-          zIndex: 50,
-        }}
-      />
-      <svg ref={ref} style={{ width: "100%", height }} />
-    </>
-  );
+  return <svg ref={ref} style={{ width: "100%", height }} />;
 }

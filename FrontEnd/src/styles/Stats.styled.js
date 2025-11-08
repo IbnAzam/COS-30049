@@ -20,4 +20,10 @@ export const StatsPage = styled(Box)({
   '& .fullwidth': {
     gridColumn: '1 / -1',
   },
+
+  '.slice:focus': {
+  outline: '1px solid rgba(0, 0, 0, 0.2)',
+  outlineOffset: '2px',
+},
+
 });
