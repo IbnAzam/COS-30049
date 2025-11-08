@@ -17,6 +17,13 @@ def _utcnow() -> datetime:
     # Keep everything in UTC internally
     return datetime.now(timezone.utc)
 
+def to_utc_iso(dt: datetime | None) -> str | None:
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)  # treat legacy naive values as UTC
+    return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
 
 @router.get("/summary")
 def summary(session: Session = Depends(get_session)) -> Dict[str, Any]:
@@ -55,6 +62,16 @@ def summary(session: Session = Depends(get_session)) -> Dict[str, Any]:
         "last_24h": last_24h
     }
 
+@router.get("/latest-spam")
+def latest_spam(session: Session = Depends(get_session)):
+    dt = session.exec(
+        select(Prediction.created_at)
+        .where(Prediction.label == "Spam")
+        .order_by(Prediction.created_at.desc())
+        .limit(1)
+    ).first()
+
+    return {"created_at": to_utc_iso(dt)}
 
 @router.get("/timeseries")
 def timeseries(
