@@ -35,11 +35,21 @@ export const Sidebar = styled(Box)(({ theme }) => ({
     },
     '& a': {
         textDecoration: 'none',
-        color: 'White',
+        color: 'white',
         display: 'block',
         padding: 5,
         fontSize: 20,
+        transition: 'color 0.3s, background-color 0.3s',
+        borderRadius: 10,
+
+        '&.active': {
+            backgroundColor: '#444',  // grey background for active tab
+            color: '#bbb',            // faded text
+            borderRadius: 10,
+            pointerEvents: 'none',    // disables clicking again
+        },
     },
+
 }));
 
 export const Main = styled(Box)({   
