@@ -11,7 +11,7 @@ export default function Stats() {
 
       {/* Top row: full-width stacked bars */}
       <section className="card fullwidth">
-        <h4 style={{ marginTop: 0 }}>Spam vs Ham (Last 7 Days)</h4>
+        <h4 style={{ marginTop: 0 }}>Spam vs Ham</h4>
         <StackedBar7d height={250} width={1100} />
       </section>
 
