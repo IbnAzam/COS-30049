@@ -5,25 +5,26 @@ import ProbabilityHistogram from "../dataVis/ProbabilityHistogram";
 
 
 export default function Stats() {
-    return (
-        <StatsPage>
-            <h1>Stats</h1>
+  return (
+    <StatsPage>
+      <h1>Stats</h1>
 
-            <div className="fullwidth">
-                <h3>Spam vs Ham (Last 7 Days)</h3>
-                <StackedBar7d width={1200} height={250} />
-            </div>
+      {/* Top row: full-width stacked bars */}
+      <section className="card fullwidth">
+        <h4 style={{ marginTop: 0 }}>Spam vs Ham (Last 7 Days)</h4>
+        <StackedBar7d height={250} width={1100} />
+      </section>
 
-            <div style={{ maxWidth: 560 }}>
-                <h3>Total Ratio</h3>
-                <PieSpamHam width={520} height={350} />
-            </div>
+      {/* Bottom row: two cards side-by-side */}
+      <section className="card">
+        <h4 style={{ marginTop: 0 }}>Total Ratio</h4>
+        <PieSpamHam height={350} width={350} />
+      </section>
 
-            <div style={{ maxWidth: 560 }}>
-                <h3>Confidence</h3>
-                <ProbabilityHistogram width={600} height={400} />
-            </div>
-        
-        </StatsPage>
-    );
+      <section className="card span-2">
+        <h4 style={{ marginTop: 0 }}>Confidence</h4>
+        <ProbabilityHistogram height={350} width={800} bins={20} />
+      </section>
+    </StatsPage>
+  );
 }
