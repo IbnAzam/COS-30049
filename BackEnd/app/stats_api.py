@@ -212,15 +212,43 @@ def distribution(
 ) -> Dict[str, Any]:
     """
     Histogram of probability (0..1). Binned on the server.
+    Returns:
+      {
+        "bins": N,
+        "counts": [c0..cN-1],
+        "bin_edges": [e0..eN],  # length N+1 from 0.0..1.0
+        "total": sum(counts)
+      }
     """
-    probs: List[float] = [
-        float(p) for (p,) in session.exec(select(Prediction.probability)).all()
-        if p is not None
-    ]
+    # Query probabilities as scalars (works across SQLAlchemy/SQLModel versions)
+    result = session.exec(select(Prediction.probability))
+    try:
+        values = result.scalars().all()  # preferred when available
+    except AttributeError:
+        values = result.all()            # already scalars in your setup
+
+    # Clean + clamp to [0, 1]
+    probs = []
+    for p in values:
+        if p is None:
+            continue
+        try:
+            x = float(p)
+        except (TypeError, ValueError):
+            continue
+        if x < 0.0: x = 0.0
+        if x > 1.0: x = 1.0
+        probs.append(x)
+
     counts = [0] * bins
-    for p in probs:
-        idx = min(bins - 1, max(0, int(p * bins)))
+    for x in probs:
+        idx = min(bins - 1, int(x * bins))
         counts[idx] += 1
 
     bin_edges = [i / bins for i in range(bins + 1)]
-    return {"bins": bins, "counts": counts, "bin_edges": bin_edges}
+    return {
+        "bins": bins,
+        "counts": counts,
+        "bin_edges": bin_edges,
+        "total": sum(counts),
+    }

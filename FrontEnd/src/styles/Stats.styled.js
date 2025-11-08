@@ -6,7 +6,7 @@ export const StatsPage = styled(Box)({
 
   display: 'grid',
   gridTemplateRows: 'auto 1fr',
-  gridTemplateColumns: 'minmax(480px, 1fr) 320px',
+  gridTemplateColumns: 'minmax(480px, 1fr) 560px',
   gap: 24,
   padding: '16px 24px 48px',
 
