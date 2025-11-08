@@ -24,12 +24,25 @@ Students may extract features such as:
 - Histogram of keyword frequencies  
 
 ## How to use
-- Run individual Machine Learning Model scripts on their own (generates png of visuals), there are three
-  1. LinearRegression.py
-  2. NaiveBayes.py
-  3. RandomForest.py
+you will need two terminals running at once for this to work
 
-- DataProcessing.py is merging the two separate CSVs and makiing common columns to align them into one coherent set
-  - Creates final.csv
+**first terminal:**
+`cd BackEnd`
 
-- DataAnalyst.py is data visualisation of the final.csv
+then
+`.venv\Scripts\activate`
+
+for the python libraries 
+(install them via the requirements.txt - `pip install -r requirements.txt` )
+then
+`uvicorn app.main:app --reload --port 8000`
+
+
+
+**second terminal:**
+`cd FrontEnd`
+
+then
+`npm run dev`
+
+Go to http://localhost:5173/
