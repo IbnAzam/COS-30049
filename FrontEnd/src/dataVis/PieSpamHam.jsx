@@ -1,6 +1,7 @@
 // PieSpamHam.jsx
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import * as d3 from "d3";
+import { useQuery } from "@tanstack/react-query";
 
 const API = import.meta.env.VITE_API_BASE || "http://localhost:8000";
 const COLORS = { Ham: "#5bc0de", Spam: "#d9534f" };
@@ -8,9 +9,9 @@ const COLORS = { Ham: "#5bc0de", Spam: "#d9534f" };
 /** Viewport-safe pointer coordinates for mouse/touch */
 const pointerXY = (evt) => {
   if (evt?.clientX != null) return [evt.clientX, evt.clientY]; // mouse
-  const t = evt?.touches?.[0] || evt?.changedTouches?.[0];      // touch
+  const t = evt?.touches?.[0] || evt?.changedTouches?.[0]; // touch
   if (t) return [t.clientX, t.clientY];
-  return [evt?.pageX ?? 0, evt?.pageY ?? 0];                    // fallback
+  return [evt?.pageX ?? 0, evt?.pageY ?? 0]; // fallback
 };
 
 /** Create/reuse a single BODY-level tooltip (true fixed positioning) */
@@ -33,27 +34,33 @@ function getBodyTooltip() {
     .style("opacity", 0);
 }
 
+// Fetch + normalize summary
+async function fetchSummary() {
+  const res = await fetch(`${API}/api/stats/summary`);
+  if (!res.ok) throw new Error("Failed to load summary");
+  const json = await res.json();
+  const byLabel = json?.by_label ?? [];
+  return ["Ham", "Spam"].map((k) => ({
+    label: k,
+    c: byLabel.find((x) => x.label === k)?.c ?? 0,
+  }));
+}
+
 export default function PieSpamHam({ width = 360, height = 260 }) {
-  const [data, setData] = useState(null); // [{label:"Ham", c:123}, {label:"Spam", c:45}]
-  const [err, setErr] = useState("");
   const svgRef = useRef(null);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch(`${API}/api/stats/summary`);
-        const json = await res.json();
-        const byLabel = json?.by_label ?? [];
-        const norm = ["Ham", "Spam"].map((k) => ({
-          label: k,
-          c: byLabel.find((x) => x.label === k)?.c ?? 0,
-        }));
-        setData(norm);
-      } catch (e) {
-        setErr(e.message || "Failed to load summary");
-      }
-    })();
-  }, []);
+  // ✅ React Query replaces manual fetch
+  const {
+    data,
+    error,
+    isLoading,
+  } = useQuery({
+    queryKey: ["summary"],
+    queryFn: fetchSummary,
+    refetchInterval: 10000, // refresh every 10s
+    refetchOnWindowFocus: true,
+    staleTime: 5000,
+  });
 
   useEffect(() => {
     if (!data) return;
@@ -107,7 +114,7 @@ export default function PieSpamHam({ width = 360, height = 260 }) {
       .attr("fill", (d) => COLORS[d.data.label] || "#999")
       .attr("stroke", "#fff")
       .attr("stroke-width", 1)
-      .attr("tabindex", 0) // keyboard focusable
+      .attr("tabindex", 0)
       .attr("role", "img")
       .attr("aria-label", (d) => {
         const pct = total ? ((d.data.c / total) * 100).toFixed(1) : "0.0";
@@ -123,7 +130,6 @@ export default function PieSpamHam({ width = 360, height = 260 }) {
         d3.select(this).attr("opacity", 1);
         hideTip();
       })
-      // touch
       .on("touchstart", function (event, d) {
         d3.select(this).attr("opacity", 0.9);
         showTip(event, d);
@@ -133,7 +139,6 @@ export default function PieSpamHam({ width = 360, height = 260 }) {
         d3.select(this).attr("opacity", 1);
         hideTip();
       })
-      // keyboard (focus shows near the slice’s top-center)
       .on("focus", function (event, d) {
         const r = this.getBoundingClientRect();
         showTip({ clientX: r.left + r.width / 2, clientY: r.top }, d);
@@ -189,8 +194,8 @@ export default function PieSpamHam({ width = 360, height = 260 }) {
       .text((d) => d.c);
   }, [data, width, height]);
 
-  if (err) return <p style={{ color: "crimson" }}>{err}</p>;
-  if (!data) return <p>Loading pie…</p>;
+  if (isLoading) return <p>Loading pie…</p>;
+  if (error) return <p style={{ color: "crimson" }}>{error.message}</p>;
 
   return <svg ref={svgRef} style={{ width: "100%", height }} />;
 }

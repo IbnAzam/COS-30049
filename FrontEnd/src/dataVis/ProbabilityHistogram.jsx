@@ -1,6 +1,7 @@
 // ProbabilityHistogram.jsx
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import * as d3 from "d3";
+import { useQuery } from "@tanstack/react-query";
 
 const API = import.meta.env.VITE_API_BASE || "http://localhost:8000";
 
@@ -31,42 +32,43 @@ function getBodyTooltip() {
     .style("opacity", 0);
 }
 
-// Single-hue teal gradient (light → deep) across probability 0→1
+// Single-hue teal → red gradient across probability 0→1
 const colorForProb = d3
   .scaleLinear()
   .domain([0, 1])
-  .range(["#1dc7ffff", "#ff2222ff"]) // light teal to your existing teal
+  .range(["#1dc7ff", "#ff2222"])
   .interpolate(d3.interpolateRgb);
 
 // Format a [lo, hi) bin range string like "0.4–0.5"
-const fmtRange = (lo, hi) =>
-  `${d3.format(".1f")(lo)}–${d3.format(".1f")(hi)}`;
+const fmtRange = (lo, hi) => `${d3.format(".1f")(lo)}–${d3.format(".1f")(hi)}`;
+
+// ---- Fetcher ----
+async function fetchDistribution(bins) {
+  const res = await fetch(`${API}/api/stats/distribution?bins=${bins}`);
+  if (!res.ok) throw new Error("Failed to load distribution");
+  const json = await res.json();
+
+  const counts = json?.counts ?? [];
+  const edges =
+    json?.bin_edges && json.bin_edges.length === counts.length + 1
+      ? json.bin_edges
+      : Array.from({ length: counts.length + 1 }, (_, i) => i / counts.length);
+  const total = json?.total ?? counts.reduce((a, b) => a + b, 0);
+
+  return { counts, edges, total };
+}
 
 export default function ProbabilityHistogram({ width = 720, height = 320, bins = 20 }) {
-  const [data, setData] = useState(null); // { counts, bin_edges, total }
-  const [err, setErr] = useState("");
   const svgRef = useRef(null);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch(`${API}/api/stats/distribution?bins=${bins}`);
-        const json = await res.json();
-
-        // normalize shape (support old payloads too)
-        const counts = json?.counts ?? [];
-        const edges =
-          json?.bin_edges && json.bin_edges.length === counts.length + 1
-            ? json.bin_edges
-            : Array.from({ length: counts.length + 1 }, (_, i) => i / counts.length);
-        const total = json?.total ?? counts.reduce((a, b) => a + b, 0);
-
-        setData({ counts, edges, total });
-      } catch (e) {
-        setErr(e.message || "Failed to load distribution");
-      }
-    })();
-  }, [bins]);
+  // ✅ Replace manual fetch with React Query
+  const { data, error, isLoading } = useQuery({
+    queryKey: ["distribution", bins],
+    queryFn: () => fetchDistribution(bins),
+    refetchInterval: 10000, // refresh every 10s
+    refetchOnWindowFocus: true,
+    staleTime: 5000,
+  });
 
   useEffect(() => {
     if (!data) return;
@@ -92,9 +94,7 @@ export default function ProbabilityHistogram({ width = 720, height = 320, bins =
     const yMax = d3.max(counts) ?? 1;
     const y = d3.scaleLinear().domain([0, yMax]).nice().range([innerH, 0]);
 
-    // Threshold line (x=0.5)
-    const xThreshold = x((0.5 + (0.5 / (edges.length - 1)) - 0.5)) // keep band center math sane
-      ?? (innerW * 0.5); // fallback: middle
+    // Decision boundary line (x=0.5)
     g.append("line")
       .attr("x1", innerW * 0.5)
       .attr("x2", innerW * 0.5)
@@ -134,44 +134,48 @@ export default function ProbabilityHistogram({ width = 720, height = 320, bins =
     const hideTip = () => tip.style("opacity", 0);
 
     // Bars
+    // Bars (bind both count and index)
     g.selectAll("rect.bar")
-      .data(counts)
+      .data(counts.map((c, i) => ({ c, i })))
       .enter()
       .append("rect")
       .attr("class", "bar")
-      .attr("x", (_, i) => x(centers[i]))
+      .attr("x", (d) => x(centers[d.i]))
       .attr("width", x.bandwidth())
       .attr("y", innerH)
       .attr("height", 0)
-      .attr("fill", (_, i) => colorForProb(centers[i])) // single-hue gradient by probability
-      .attr("tabindex", 0)
-      .on("mouseenter", function (event, d, i) {
+      .attr("fill", (d) => colorForProb(centers[d.i]))
+      .style("cursor", "default")
+      .on("mouseenter", function (event, d) {
         d3.select(this).attr("opacity", 0.9);
-        showTip(event, d3.select(this).datumIndex ?? (this.__dataIndex ?? counts.indexOf(d)));
+        showTip(event, d.i);            // pass the true index
       })
       .on("mousemove", moveTip)
       .on("mouseleave", function () {
         d3.select(this).attr("opacity", 1);
         hideTip();
       })
-      .on("focus", function () {
-        const r = this.getBoundingClientRect();
-        showTip({ clientX: r.left + r.width / 2, clientY: r.top }, d3.select(this).datumIndex ?? 0);
-      })
-      .on("blur", hideTip)
       .transition()
       .duration(650)
-      .attr("y", (d) => y(d))
-      .attr("height", (d) => innerH - y(d));
+      .attr("y", (d) => y(d.c))
+      .attr("height", (d) => innerH - y(d.c));
+
 
     // Axis
     const xAxis = d3
       .axisBottom(x)
-      .tickValues(centers.filter((_, i) => (edges.length - 1) <= 12 ? true : i % 2 === 0)) // fewer ticks if many bins
+      .tickValues(
+        centers.filter((_, i) => (edges.length - 1) <= 12 ? true : i % 2 === 0)
+      )
       .tickFormat((c) => d3.format(".1f")(c));
     const yAxis = d3.axisLeft(y).ticks(5).tickFormat(d3.format("~s"));
 
-    g.append("g").attr("transform", `translate(0,${innerH})`).call(xAxis).selectAll("text").attr("font-size", 12);
+    g.append("g")
+      .attr("transform", `translate(0,${innerH})`)
+      .call(xAxis)
+      .selectAll("text")
+      .attr("font-size", 12);
+
     g.append("g").call(yAxis).selectAll("text").attr("font-size", 12);
 
     // Axis labels
@@ -193,8 +197,8 @@ export default function ProbabilityHistogram({ width = 720, height = 320, bins =
       .text("Count of predictions");
   }, [data, width, height]);
 
-  if (err) return <p style={{ color: "crimson" }}>{err}</p>;
-  if (!data) return <p>Loading histogram…</p>;
+  if (isLoading) return <p>Loading histogram…</p>;
+  if (error) return <p style={{ color: "crimson" }}>{error.message}</p>;
 
   return <svg ref={svgRef} style={{ width: "100%", height }} />;
 }

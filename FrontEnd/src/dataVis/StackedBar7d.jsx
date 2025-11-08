@@ -1,42 +1,29 @@
 // StackedBar7d.jsx
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import * as d3 from "d3";
+import { useQuery } from "@tanstack/react-query";
 
 const API = import.meta.env.VITE_API_BASE || "http://localhost:8000";
 
 // ---- Time formatting helpers ----
-
-// Melbourne label helper (display only)
-const fmtMelDate = (iso) =>
-  new Date(iso).toLocaleDateString("en-AU", {
-    timeZone: "Australia/Melbourne",
-    month: "short",
-    day: "numeric",
-    weekday: "short",
-  });
-
-// Detect if a bucket key is a local day key like "2025-11-09"
 const isLocalDayKey = (key) =>
   typeof key === "string" && key.length === 10 && !key.includes("T");
 
-// Melbourne "YYYY-MM-DD" from a Date
 const melDayKey = (d) =>
   d.toLocaleDateString("en-CA", { timeZone: "Australia/Melbourne" });
 
-// Build the last 7 Melbourne day keys (including today in Melbourne)
 const buildLast7MelKeys = () => {
   const todayKey = melDayKey(new Date());
-  const base = new Date(`${todayKey}T00:00:00`); // only used for +/- days
+  const base = new Date(`${todayKey}T00:00:00`);
   const out = [];
   for (let i = 6; i >= 0; i--) {
     const d = new Date(base);
     d.setDate(base.getDate() - i);
-    out.push(melDayKey(d)); // always recompute via Melbourne tz
+    out.push(melDayKey(d));
   }
   return out;
 };
 
-// Labels for axis/tooltip that work for both formats
 const labelFromLocalKey = (key) =>
   new Date(key + "T00:00:00").toLocaleDateString("en-AU", {
     timeZone: "Australia/Melbourne",
@@ -56,17 +43,14 @@ const labelFromUtcIso = (iso) =>
 const fmtTick = (bucket) =>
   isLocalDayKey(bucket) ? labelFromLocalKey(bucket) : labelFromUtcIso(bucket);
 
-// ---- Tooltip utils (zoom-safe) ----
-
-/** Viewport-safe pointer coordinates for mouse/touch */
+// ---- Tooltip utils ----
 const pointerXY = (evt) => {
-  if (evt?.clientX != null) return [evt.clientX, evt.clientY]; // mouse
-  const t = evt?.touches?.[0] || evt?.changedTouches?.[0]; // touch
+  if (evt?.clientX != null) return [evt.clientX, evt.clientY];
+  const t = evt?.touches?.[0] || evt?.changedTouches?.[0];
   if (t) return [t.clientX, t.clientY];
-  return [evt?.pageX ?? 0, evt?.pageY ?? 0]; // fallback
+  return [evt?.pageX ?? 0, evt?.pageY ?? 0];
 };
 
-/** Create/reuse a single BODY-level tooltip (true fixed positioning) */
 function getBodyTooltip() {
   let tip = d3.select("#global-stackedbar-tooltip");
   if (tip.empty()) {
@@ -86,35 +70,31 @@ function getBodyTooltip() {
     .style("opacity", 0);
 }
 
-// -----------------------------------
+// ---- Fetcher ----
+async function fetchTimeseries() {
+  const res = await fetch(`${API}/api/stats/timeseries?bucket=day&days=7&tz=Australia/Melbourne`);
+  if (!res.ok) throw new Error("Failed to load timeseries");
+  const json = await res.json();
+  return json?.points ?? [];
+}
 
 export default function StackedBar7d({ width = 720, height = 320 }) {
-  const [data, setData] = useState(null);
-  const [err, setErr] = useState("");
   const ref = useRef(null);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch(
-          `${API}/api/stats/timeseries?bucket=day&days=7&tz=Australia/Melbourne`
-        );
-        const json = await res.json();
-        setData(json?.points ?? []);
-      } catch (e) {
-        setErr(e.message || "Failed to load timeseries");
-      }
-    })();
-  }, []);
+  // ✅ React Query replaces manual fetch
+  const { data, error, isLoading } = useQuery({
+    queryKey: ["timeseries", "7d"],
+    queryFn: fetchTimeseries,
+    refetchInterval: 10000, // 10s
+    refetchOnWindowFocus: true,
+    staleTime: 5000,
+  });
 
-  // Ensure 7 consecutive buckets that match what the server sends.
-  // If server sends local day keys ("YYYY-MM-DD"): build last 7 Melbourne days and map counts.
-  // If server sends UTC ISO (fallback): keep the original UTC path.
+  // Normalize 7-day points
   const points7 = useMemo(() => {
     if (!data) return null;
 
     if (data.length === 0) {
-      // keep axes stable with 7 zero bars (local-day version)
       return buildLast7MelKeys().map((k) => ({
         bucket: k,
         Spam: 0,
@@ -127,7 +107,6 @@ export default function StackedBar7d({ width = 720, height = 320 }) {
     const serverUsesLocal = isLocalDayKey(serverKeySample);
 
     if (serverUsesLocal) {
-      // Server has already aggregated by Melbourne day ("YYYY-MM-DD")
       const map = new Map(data.map((d) => [d.bucket, d]));
       return buildLast7MelKeys().map((k) => {
         const hit = map.get(k);
@@ -137,7 +116,7 @@ export default function StackedBar7d({ width = 720, height = 320 }) {
       });
     }
 
-    // Fallback: server is still sending UTC ISO midnights
+    // Fallback: UTC ISO keys
     const map = new Map(data.map((d) => [d.bucket, d]));
     const out = [];
     const todayUTC = new Date();
@@ -172,7 +151,6 @@ export default function StackedBar7d({ width = 720, height = 320 }) {
       .append("g")
       .attr("transform", `translate(${margin.left},${margin.top})`);
 
-    // Scales
     const x = d3
       .scaleBand()
       .domain(points7.map((d) => d.bucket))
@@ -186,44 +164,39 @@ export default function StackedBar7d({ width = 720, height = 320 }) {
       .nice()
       .range([innerH, 0]);
 
-    const keys = ["Ham", "Spam"]; // order matters for stack & legend
-    const color = d3.scaleOrdinal().domain(keys).range(["#5bc0de", "#d9534f"]); // Ham teal, Spam red
-
+    const keys = ["Ham", "Spam"];
+    const color = d3.scaleOrdinal().domain(keys).range(["#5bc0de", "#d9534f"]);
     const stacked = d3.stack().keys(keys)(points7);
 
-    // Tooltip handlers (zoom-safe)
-    // Tooltip handlers (zoom-safe)
-const showTip = (event, d, key) => {
-  const bucketKey = d.data.bucket;
-  const count = Math.round(d[1] - d[0]);       // segment size
-  const total = d.data.Total || 0;             // correct field (capital T)
-  const share = total ? ((count / total) * 100).toFixed(1) : "0.0";
+    // Tooltip
+    const showTip = (event, d, key) => {
+      const bucketKey = d.data.bucket;
+      const count = Math.round(d[1] - d[0]);
+      const total = d.data.Total || 0;
+      const share = total ? ((count / total) * 100).toFixed(1) : "0.0";
 
-  const html = `
-    <div style="font-weight:600;margin-bottom:2px">${fmtTick(bucketKey)}</div>
-    <div>
-      <span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${color(
-        key
-      )};margin-right:6px;vertical-align:middle;"></span>${key}: <b>${count}</b>
-    </div>
-    <div style="color:#666">Share: ${share}%</div>
-    <div style="margin-top:2px;color:#666">Total: ${total}</div>
-  `;
-  const [xv, yv] = pointerXY(event);
-  tooltip.html(html).style("left", `${xv + 12}px`).style("top", `${yv + 12}px`).style("opacity", 1);
-};
-
+      const html = `
+        <div style="font-weight:600;margin-bottom:2px">${fmtTick(bucketKey)}</div>
+        <div>
+          <span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${color(
+            key
+          )};margin-right:6px;vertical-align:middle;"></span>${key}: <b>${count}</b>
+        </div>
+        <div style="color:#666">Share: ${share}%</div>
+        <div style="margin-top:2px;color:#666">Total: ${total}</div>
+      `;
+      const [xv, yv] = pointerXY(event);
+      tooltip.html(html).style("left", `${xv + 12}px`).style("top", `${yv + 12}px`).style("opacity", 1);
+    };
 
     const moveTip = (event) => {
       const [xv, yv] = pointerXY(event);
       tooltip.style("left", `${xv + 12}px`).style("top", `${yv + 12}px`);
     };
 
-    const hideTip = () => {
-      tooltip.style("opacity", 0);
-    };
+    const hideTip = () => tooltip.style("opacity", 0);
 
-    // Layers + rects
+    // Draw bars
     const groups = g
       .selectAll("g.layer")
       .data(stacked, (d) => d.key)
@@ -261,8 +234,6 @@ const showTip = (event, d, key) => {
     const xAxis = d3.axisBottom(x).tickFormat((bucket) => fmtTick(bucket));
     const yAxis = d3.axisLeft(y).ticks(5).tickFormat(d3.format("~s"));
 
-
-    // X-axis title
     g.append("g")
       .attr("transform", `translate(0,${innerH})`)
       .call(xAxis)
@@ -271,17 +242,17 @@ const showTip = (event, d, key) => {
 
     g.append("g").call(yAxis).selectAll("text").attr("font-size", 12);
 
-    // Y-axis title
+    // Y-axis label
     g.append("text")
       .attr("transform", "rotate(-90)")
       .attr("x", -innerH / 2)
-      .attr("y", -margin.left + 14) // tuck near the axis
+      .attr("y", -margin.left + 14)
       .attr("text-anchor", "middle")
       .attr("font-size", 12)
       .attr("fill", "#444")
       .text("Count");
 
-    // Legend (bottom-center)
+    // Legend
     const legendHeight = 20;
     const legend = g
       .append("g")
@@ -302,12 +273,11 @@ const showTip = (event, d, key) => {
       .attr("transform", (_, i) => `translate(${i * 80}, 0)`);
 
     item.append("rect").attr("width", 12).attr("height", 12).attr("rx", 2).attr("fill", (d) => d.color);
-
     item.append("text").attr("x", 18).attr("y", 10).attr("font-size", 12).text((d) => d.name);
   }, [points7, width, height]);
 
-  if (err) return <p style={{ color: "crimson" }}>{err}</p>;
-  if (!points7) return <p>Loading chart…</p>;
+  if (isLoading) return <p>Loading chart…</p>;
+  if (error) return <p style={{ color: "crimson" }}>{error.message}</p>;
 
   return <svg ref={ref} style={{ width: "100%", height }} />;
 }
