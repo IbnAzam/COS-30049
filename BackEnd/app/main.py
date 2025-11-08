@@ -6,6 +6,8 @@ from sqlmodel import Session
 from .schemas import PredictRequest, PredictResponse
 from .db import init_db, get_session
 from .predict import classify_and_log  # logging wrapper
+from .stats_api import router as stats_router
+
 
 app = FastAPI(title="Spam Detector API", version="1.0.0")
 
@@ -20,6 +22,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(stats_router)
+
 
 @app.on_event("startup")
 def _startup():
