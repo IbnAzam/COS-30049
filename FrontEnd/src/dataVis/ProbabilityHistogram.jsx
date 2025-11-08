@@ -75,7 +75,7 @@ export default function ProbabilityHistogram({ width = 720, height = 320, bins =
     const svg = d3.select(svgRef.current);
     svg.selectAll("*").remove();
 
-    const margin = { top: 12, right: 20, bottom: 40, left: 46 };
+    const margin = { top: 12, right: 80, bottom: 40, left: 60 };
     const innerW = width - margin.left - margin.right;
     const innerH = height - margin.top - margin.bottom;
 
@@ -104,8 +104,8 @@ export default function ProbabilityHistogram({ width = 720, height = 320, bins =
       .attr("stroke-dasharray", "4 4");
 
     g.append("text")
-      .attr("x", innerW * 0.5 + 6)
-      .attr("y", 12)
+      .attr("x", innerW * 0.5 - 60)
+      .attr("y", -10)
       .attr("fill", "#666")
       .attr("font-size", 11)
       .text("Decision boundary (0.5)");

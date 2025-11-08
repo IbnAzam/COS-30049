@@ -16,7 +16,7 @@ export default function Stats() {
 
             <div style={{ maxWidth: 560 }}>
                 <h3>Total Ratio</h3>
-                <PieSpamHam width={520} height={300} />
+                <PieSpamHam width={520} height={350} />
             </div>
 
             <div style={{ maxWidth: 560 }}>

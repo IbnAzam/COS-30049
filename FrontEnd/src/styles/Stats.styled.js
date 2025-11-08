@@ -6,9 +6,11 @@ export const StatsPage = styled(Box)({
 
   display: 'grid',
   gridTemplateRows: 'auto 1fr',
-  gridTemplateColumns: 'minmax(480px, 1fr) 560px',
+  gridTemplateColumns: 'minmax(520px, 1fr) minmax(420px, 1fr)',
   gap: 24,
-  padding: '16px 24px 48px',
+  '@media (max-width: 1200px)': {
+    gridTemplateColumns: '1fr',   // stack charts when space is limited
+  },
 
   '& h1': {
     gridColumn: '1 / -1',
