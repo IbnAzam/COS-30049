@@ -40,7 +40,7 @@ function Scan() {
         {/* Left column */}
         <form onSubmit={(e) => e.preventDefault()}>
             <textarea
-            placeholder="Paste or type text here..."
+            placeholder="Paste or type Email/URL here..."
             value={text}
             onChange={(e) => setText(e.target.value)}
             />
