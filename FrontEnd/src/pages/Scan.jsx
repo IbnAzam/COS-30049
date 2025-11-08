@@ -68,13 +68,25 @@ return (
     {/* Right column */}
     <Result>
         <div className="card">
-        <div className="circle">
-            {result ? Math.round(result.probability * 100) : 0}%
-        </div>
+            <div className="circle">
+                {result ? Math.round(result.probability * 100) : 0}
+                <div className="percent">%</div>
+            </div>
 
-        <div className="label">
-            {result ? result.label : 'Spam score'}
-        </div>
+            <div className="label">
+                {result ? "Likely to be Spam": 'Spam Score'}
+            </div>
+
+            <div className="verdict">
+                {result
+                    ? result.probability > 0.5
+                    ? "Verdict: Spam detected 🚨"
+                    : "Verdict: Clean (Ham) ✅"
+                    : ""}
+            </div>
+
+            
+        
         </div>
     </Result>
     </ScanPage>

@@ -7,17 +7,17 @@ export const ScanPage = styled(Box)({
 
     /* Two-column layout: left grows, right fixed width */
     display: 'grid',
+    gridTemplateRows: 'auto 1fr',
     gridTemplateColumns: 'minmax(480px, 1fr) 320px',
-    alignItems: 'start',
     gap: 24,
-    padding: '24px 24px 48px',
-    
+    padding: '16px 24px 48px',
+
     '& h1': {
-        gridColumn: '1 / -1',
-        margin: 0,
-        marginBottom: 12,
-        fontSize: '2rem',
+    gridColumn: '1 / -1',
+    margin: 0,
+    fontSize: '3rem',
     },
+
 
     /* Left column form */
     '& form': {
@@ -49,35 +49,57 @@ export const ScanPage = styled(Box)({
 });
 
 export const Result = styled(Box)({
-    /* Right column panel */
-    position: 'sticky',   // stays visible as you scroll
-    top: 80,              // distance from top when sticky
-    alignSelf: 'start',   // pin to top of its grid cell
+    position: 'sticky',
+    top: 80,
+    alignSelf: 'start',
 
     '.card': {
-        padding: 16,
-        borderRadius: 12,
-        border: '1px solid #d0d0d0',
-        background: '#fff',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
         display: 'grid',
-        placeItems: 'center',
-        gap: 8,
+        gridTemplateColumns: 'auto 1fr', // circle fits; label gets the rest
+        gridAutoRows: 'auto',            // rows grow to content
+        gap: 16,
+        padding: 16,
+        border: '1px solid #d0d0d0',
+        borderRadius: 12,
+        background: '#fff',
+        alignItems: 'center',
     },
 
     '.circle': {
-        width: 140,
-        height: 140,
+        gridColumn: '1',
+        gridRow: '1',
+        flexShrink: 0,
+        width: 100,
+        height: 100,
         borderRadius: '50%',
-        border: '6px solid #3f51b5',
-        display: 'grid',
-        placeItems: 'center',
-        fontSize: 24,
-        fontWeight: 700,
+        border: '4px solid #3f51b5',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: '1.3em',
+        lineHeight: 1,
     },
 
+    '.percent': { fontSize: '0.5em', marginTop: 5 },
+
     '.label': {
-        fontSize: 14,
+        gridColumn: '2',
+        gridRow: '1',
+        alignSelf: 'center',
+        fontSize: '2.1rem',
+        lineHeight: 1.2,
+    },
+
+    '.verdict': {
+        gridColumn: '1 / -1',  // span both columns
+        gridRow: '2',
+        marginTop: 8,
+        fontSize: '1.2rem',
         color: '#555',
+        // optional polish:
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
     },
 });
