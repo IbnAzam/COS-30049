@@ -7,23 +7,36 @@ const API = import.meta.env.VITE_API_BASE || "http://localhost:8000";
 
 // ---- Fetchers ----
 async function fetchSummary() {
-  const res = await axios.get(`${API}/api/stats/summary`);
-  return res.data;
+  const { data } = await axios.get(`${API}/api/stats/summary`);
+  return data;
 }
-
 async function fetchLastSpam() {
-  const res = await axios.get(`${API}/api/stats/latest-spam`);
-  return res.data?.created_at || null;
+  const { data } = await axios.get(`${API}/api/stats/latest-spam`);
+  return data?.created_at || null;
 }
 
 function Home() {
-  // ✅ parallel React Query calls
+  // Keep previous values during background refetches
   const summaryQuery = useQuery({
     queryKey: ["summary"],
     queryFn: fetchSummary,
     refetchInterval: 10000,
     refetchOnWindowFocus: true,
     staleTime: 5000,
+    placeholderData: (prev) => prev, // 👈 prevents momentary "empty"
+    select: (d) => {
+      if (!d) return d;
+      const byLabel = Array.isArray(d.by_label) ? d.by_label : [];
+      // normalize map for safety
+      const map = Object.fromEntries(
+        byLabel.map((x) => [x.label, Number(x.c ?? 0)])
+      );
+      return {
+        total_scans: Number(d.total_scans ?? 0),
+        by_label: byLabel,
+        by_label_map: { Ham: map.Ham ?? 0, Spam: map.Spam ?? 0 },
+      };
+    },
   });
 
   const lastSpamQuery = useQuery({
@@ -32,15 +45,18 @@ function Home() {
     refetchInterval: 10000,
     refetchOnWindowFocus: true,
     staleTime: 5000,
+    placeholderData: (prev) => prev, // 👈 keep previous while refetching
   });
 
-  const summary = summaryQuery.data;
-  const lastSpam = lastSpamQuery.data;
-  const isLoading = summaryQuery.isLoading || lastSpamQuery.isLoading;
+  // Only render stats when both are ready
+  const summaryReady = summaryQuery.status === "success" && summaryQuery.data;
+  const lastSpamReady = lastSpamQuery.status === "success";
+
   const error = summaryQuery.error || lastSpamQuery.error;
 
-  const total = summary?.total_scans ?? 0;
-  const spamCount = summary?.by_label?.find((x) => x.label === "Spam")?.c ?? 0;
+  const total = summaryReady ? summaryQuery.data.total_scans : undefined;
+  const spamCount = summaryReady ? summaryQuery.data.by_label_map.Spam : undefined;
+  const lastSpam = lastSpamReady ? lastSpamQuery.data : null;
 
   return (
     <>
@@ -55,7 +71,7 @@ function Home() {
           </p>
         )}
 
-        {isLoading ? (
+        {!summaryReady || !lastSpamReady ? (
           <p>Loading stats...</p>
         ) : (
           <ul>

@@ -48,15 +48,27 @@ async function fetchDistribution(bins) {
   if (!res.ok) throw new Error("Failed to load distribution");
   const json = await res.json();
 
-  const counts = json?.counts ?? [];
-  const edges =
-    json?.bin_edges && json.bin_edges.length === counts.length + 1
+  let counts = json?.counts ?? [];
+  let n = counts.length;
+
+  // ✅ Fallback edges when server doesn't supply them
+  let edges =
+    json?.bin_edges && json.bin_edges.length === n + 1
       ? json.bin_edges
-      : Array.from({ length: counts.length + 1 }, (_, i) => i / counts.length);
+      : (n > 0 ? Array.from({ length: n + 1 }, (_, i) => i / n) : [0, 1]);
+
+  // ✅ If there are no counts at all, synthesize a harmless zero bin
+  if (n === 0) {
+    counts = [0];
+    edges = [0, 1];
+    n = 1;
+  }
+
   const total = json?.total ?? counts.reduce((a, b) => a + b, 0);
 
   return { counts, edges, total };
 }
+
 
 export default function ProbabilityHistogram({ width = 720, height = 320, bins = 20 }) {
   const svgRef = useRef(null);
@@ -87,7 +99,7 @@ export default function ProbabilityHistogram({ width = 720, height = 320, bins =
       .attr("transform", `translate(${margin.left},${margin.top})`);
 
     // Build bin centers from edges
-    const centers = counts.map((_, i) => (edges[i] + edges[i + 1]) / 2);
+    const centers = data.counts.map((_, i) => (data.edges[i] + data.edges[i + 1]) / 2);
 
     // Scales
     const x = d3.scaleBand().domain(centers).range([0, innerW]).padding(0.1);
@@ -116,7 +128,7 @@ export default function ProbabilityHistogram({ width = 720, height = 320, bins =
       const lo = edges[i];
       const hi = edges[i + 1];
       const c = counts[i];
-      const pct = total ? ((c / total) * 100).toFixed(1) : "0.0";
+      const pct = total > 0 ? ((c / total) * 100).toFixed(1) : "0.0";
       tip
         .html(
           `<div style="font-weight:600;margin-bottom:2px">Probability ${fmtRange(lo, hi)}</div>
@@ -148,7 +160,7 @@ export default function ProbabilityHistogram({ width = 720, height = 320, bins =
       .style("cursor", "default")
       .on("mouseenter", function (event, d) {
         d3.select(this).attr("opacity", 0.9);
-        showTip(event, d.i);            // pass the true index
+        showTip(event, d.i);     // ✅ pass the real index
       })
       .on("mousemove", moveTip)
       .on("mouseleave", function () {
@@ -200,5 +212,6 @@ export default function ProbabilityHistogram({ width = 720, height = 320, bins =
   if (isLoading) return <p>Loading histogram…</p>;
   if (error) return <p style={{ color: "crimson" }}>{error.message}</p>;
 
-  return <svg ref={svgRef} style={{ width: "100%", height }} />;
+  return <svg ref={svgRef} width={width} height={height} style={{ width: "100%", height }} />;
+
 }

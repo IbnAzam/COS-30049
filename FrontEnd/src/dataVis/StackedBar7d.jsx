@@ -279,5 +279,6 @@ export default function StackedBar7d({ width = 720, height = 320 }) {
   if (isLoading) return <p>Loading chart…</p>;
   if (error) return <p style={{ color: "crimson" }}>{error.message}</p>;
 
-  return <svg ref={ref} style={{ width: "100%", height }} />;
+  return <svg ref={ref} width={width} height={height} style={{ width: "100%", height }} />;
+
 }

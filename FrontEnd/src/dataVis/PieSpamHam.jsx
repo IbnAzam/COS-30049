@@ -9,9 +9,9 @@ const COLORS = { Ham: "#5bc0de", Spam: "#d9534f" };
 /** Viewport-safe pointer coordinates for mouse/touch */
 const pointerXY = (evt) => {
   if (evt?.clientX != null) return [evt.clientX, evt.clientY]; // mouse
-  const t = evt?.touches?.[0] || evt?.changedTouches?.[0]; // touch
+  const t = evt?.touches?.[0] || evt?.changedTouches?.[0];      // touch
   if (t) return [t.clientX, t.clientY];
-  return [evt?.pageX ?? 0, evt?.pageY ?? 0]; // fallback
+  return [evt?.pageX ?? 0, evt?.pageY ?? 0];                    // fallback
 };
 
 /** Create/reuse a single BODY-level tooltip (true fixed positioning) */
@@ -34,36 +34,40 @@ function getBodyTooltip() {
     .style("opacity", 0);
 }
 
-// Fetch + normalize summary
+// ---- fetcher (normalize to array of {label, c:number}) ----
 async function fetchSummary() {
   const res = await fetch(`${API}/api/stats/summary`);
   if (!res.ok) throw new Error("Failed to load summary");
   const json = await res.json();
-  const byLabel = json?.by_label ?? [];
-  return ["Ham", "Spam"].map((k) => ({
-    label: k,
-    c: byLabel.find((x) => x.label === k)?.c ?? 0,
-  }));
+  const byLabel = Array.isArray(json?.by_label) ? json.by_label : [];
+  const map = Object.fromEntries(
+    byLabel.map((x) => [x.label, Number(x.c ?? 0)])
+  );
+  // Ensure both categories always exist and are numbers
+  return [
+    { label: "Ham",  c: map.Ham  ?? 0 },
+    { label: "Spam", c: map.Spam ?? 0 },
+  ];
 }
 
 export default function PieSpamHam({ width = 360, height = 260 }) {
   const svgRef = useRef(null);
 
-  // ✅ React Query replaces manual fetch
-  const {
-    data,
-    error,
-    isLoading,
-  } = useQuery({
-    queryKey: ["summary"],
+  const { data, error, isLoading } = useQuery({
+    queryKey: ["summary-pie"],
     queryFn: fetchSummary,
-    refetchInterval: 10000, // refresh every 10s
+    refetchInterval: 10000,
     refetchOnWindowFocus: true,
     staleTime: 5000,
+    placeholderData: (prev) => prev, // keep previous slice while refetching
   });
 
   useEffect(() => {
-    if (!data) return;
+    // Guard: must be an array
+    if (!Array.isArray(data)) return;
+
+    const rows = data.map((d) => ({ label: d.label, c: Number(d.c) || 0 }));
+    const total = rows.reduce((a, b) => a + b.c, 0);
 
     const svg = d3.select(svgRef.current);
     svg.selectAll("*").remove();
@@ -76,18 +80,29 @@ export default function PieSpamHam({ width = 360, height = 260 }) {
     const radius = Math.min(w, h) / 2;
 
     const g = svg
+      .attr("width", width)      // explicit size prevents layout flashes
+      .attr("height", height)
       .attr("viewBox", `0 0 ${width} ${height}`)
       .append("g")
       .attr("transform", `translate(${margin.left + w / 2}, ${margin.top + h / 2})`);
 
-    const total = d3.sum(data, (d) => d.c);
+    // If nothing to show, render an empty state (no crash)
+    if (total === 0) {
+      g.append("text")
+        .attr("text-anchor", "middle")
+        .attr("dy", "0.35em")
+        .attr("fill", "#666")
+        .text("No data yet");
+      return;
+    }
+
     const pie = d3.pie().sort(null).value((d) => d.c);
-    const arcs = pie(data);
+    const arcs = pie(rows);
     const arc = d3.arc().innerRadius(radius * 0.55).outerRadius(radius);
 
     const showTip = (evt, d) => {
       const [x, y] = pointerXY(evt);
-      const pct = total ? ((d.data.c / total) * 100).toFixed(1) : "0.0";
+      const pct = total > 0 ? ((d.data.c / total) * 100).toFixed(1) : "0.0";
       tip
         .html(
           `<div style="font-weight:600;margin-bottom:2px">${d.data.label}</div>
@@ -117,7 +132,7 @@ export default function PieSpamHam({ width = 360, height = 260 }) {
       .attr("tabindex", 0)
       .attr("role", "img")
       .attr("aria-label", (d) => {
-        const pct = total ? ((d.data.c / total) * 100).toFixed(1) : "0.0";
+        const pct = total > 0 ? ((d.data.c / total) * 100).toFixed(1) : "0.0";
         return `${d.data.label}: ${d.data.c} (${pct} percent)`;
       })
       .style("cursor", "default")
@@ -165,7 +180,7 @@ export default function PieSpamHam({ width = 360, height = 260 }) {
       .append("g")
       .attr("transform", `translate(${(width - 180) / 2}, ${height - margin.bottom + 10})`);
 
-    const items = data.map((d) => ({ name: d.label, color: COLORS[d.label], c: d.c }));
+    const items = rows.map((d) => ({ name: d.label, color: COLORS[d.label], c: d.c }));
     const li = legend
       .selectAll(".legend-item")
       .data(items)
@@ -174,28 +189,14 @@ export default function PieSpamHam({ width = 360, height = 260 }) {
       .attr("class", "legend-item")
       .attr("transform", (_, i) => `translate(${i * 90}, 0)`);
 
-    li.append("rect")
-      .attr("width", 12)
-      .attr("height", 12)
-      .attr("rx", 2)
-      .attr("fill", (d) => d.color);
-
-    li.append("text")
-      .attr("x", 18)
-      .attr("y", 10)
-      .attr("font-size", 12)
-      .text((d) => d.name);
-
-    li.append("text")
-      .attr("x", 18)
-      .attr("y", 24)
-      .attr("font-size", 11)
-      .attr("fill", "#666")
-      .text((d) => d.c);
+    li.append("rect").attr("width", 12).attr("height", 12).attr("rx", 2).attr("fill", (d) => d.color);
+    li.append("text").attr("x", 18).attr("y", 10).attr("font-size", 12).text((d) => d.name);
+    li.append("text").attr("x", 18).attr("y", 24).attr("font-size", 11).attr("fill", "#666").text((d) => d.c);
   }, [data, width, height]);
 
   if (isLoading) return <p>Loading pie…</p>;
   if (error) return <p style={{ color: "crimson" }}>{error.message}</p>;
 
-  return <svg ref={svgRef} style={{ width: "100%", height }} />;
+  // explicit width/height avoids layout collapses
+  return <svg ref={svgRef} width={width} height={height} style={{ width: "100%", height }} />;
 }
