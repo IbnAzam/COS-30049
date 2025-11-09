@@ -51,13 +51,13 @@ async function fetchDistribution(bins) {
   let counts = json?.counts ?? [];
   let n = counts.length;
 
-  // ✅ Fallback edges when server doesn't supply them
+  //Fallback edges when server doesn't supply them
   let edges =
     json?.bin_edges && json.bin_edges.length === n + 1
       ? json.bin_edges
       : (n > 0 ? Array.from({ length: n + 1 }, (_, i) => i / n) : [0, 1]);
 
-  // ✅ If there are no counts at all, synthesize a harmless zero bin
+  //If there are no counts at all, synthesize a harmless zero bin
   if (n === 0) {
     counts = [0];
     edges = [0, 1];
@@ -73,7 +73,7 @@ async function fetchDistribution(bins) {
 export default function ProbabilityHistogram({ width = 720, height = 320, bins = 20 }) {
   const svgRef = useRef(null);
 
-  // ✅ Replace manual fetch with React Query
+  //Replace manual fetch with React Query
   const { data, error, isLoading } = useQuery({
     queryKey: ["distribution", bins],
     queryFn: () => fetchDistribution(bins),
@@ -160,7 +160,7 @@ export default function ProbabilityHistogram({ width = 720, height = 320, bins =
       .style("cursor", "default")
       .on("mouseenter", function (event, d) {
         d3.select(this).attr("opacity", 0.9);
-        showTip(event, d.i);     // ✅ pass the real index
+        showTip(event, d.i);     //pass the real index
       })
       .on("mousemove", moveTip)
       .on("mouseleave", function () {
