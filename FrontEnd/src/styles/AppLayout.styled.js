@@ -14,7 +14,7 @@ export const Sidebar = styled(Box)(({ theme }) => ({
     backgroundColor: 'hsla(222, 45%, 16%, 1.00)',
     borderRight: `3px solid ${theme.palette.divider}`,
 
-    // 🎯 Target list items inside
+    // Target list items inside
     '& ul': {
         listStyle: 'none',
         padding: 5,
