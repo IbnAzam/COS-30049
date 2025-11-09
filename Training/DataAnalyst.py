@@ -40,7 +40,7 @@ def clean_text(text: str) -> str:
 
 combined["clean_text"] = combined["content"].map(clean_text)
 
-print("✅ Data cleaned")
+print("Data cleaned")
 
 # ---------------------------
 # A) WORD CLOUDS (saved)
