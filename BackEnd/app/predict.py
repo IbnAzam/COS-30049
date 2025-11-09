@@ -17,10 +17,10 @@ def _safe_load(path: Path) -> Optional[object]:
         if path.exists():
             return joblib.load(path)
         else:
-            print(f"⚠️  Model file not found: {path}")
+            print(f" Model file not found: {path}")
             return None
     except Exception as e:
-        print(f"⚠️  Failed to load model {path.name}: {e}")
+        print(f" Failed to load model {path.name}: {e}")
         return None
 
 email_model = _safe_load(EMAIL_MODEL_PATH)
