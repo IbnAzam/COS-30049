@@ -23,7 +23,7 @@ function Home() {
     refetchInterval: 10000,
     refetchOnWindowFocus: true,
     staleTime: 5000,
-    placeholderData: (prev) => prev, // 👈 prevents momentary "empty"
+    placeholderData: (prev) => prev, // prevents momentary "empty"
     select: (d) => {
       if (!d) return d;
       const byLabel = Array.isArray(d.by_label) ? d.by_label : [];
@@ -45,7 +45,7 @@ function Home() {
     refetchInterval: 10000,
     refetchOnWindowFocus: true,
     staleTime: 5000,
-    placeholderData: (prev) => prev, // 👈 keep previous while refetching
+    placeholderData: (prev) => prev, // keep previous while refetching
   });
 
   // Only render stats when both are ready
