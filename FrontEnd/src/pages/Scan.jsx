@@ -17,7 +17,7 @@ function Scan() {
         try {
         const data = await predictText(text);       // uses /api/predict via Vite proxy
         setResult(data);
-        setLastScannedText(text);  // ✅ store the last scanned text
+        setLastScannedText(text);  // store the last scanned text
         console.log(data);
         } catch (e) {
         setError(e?.response?.data?.detail || e?.message || 'Failed to reach API');
@@ -52,7 +52,7 @@ function Scan() {
                 disabled={
                     loading ||
                     !text.trim() ||
-                    text.trim() === lastScannedText.trim() // ✅ prevent duplicate scan
+                    text.trim() === lastScannedText.trim() // prevent duplicate scan
                 }
                 >
                 {loading ? 'Scanning…' : 'Scan'}
@@ -93,8 +93,8 @@ function Scan() {
                 <div className="verdict">
                     {result
                         ? result.probability > 0.5
-                        ? "Verdict: Spam detected 🚨"
-                        : "Verdict: Clean (Ham) ✅"
+                        ? "Verdict: Spam detected"
+                        : "Verdict: Clean (Ham)"
                         : ""}
                 </div>
 
